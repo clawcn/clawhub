@@ -71,13 +71,17 @@ export function parseClawdisMetadata(frontmatter: ParsedSkillFrontmatter) {
   const clawdbotMeta = metadataRecord?.clawdbot
   const clawdisMeta = metadataRecord?.clawdis
   const openclawMeta = metadataRecord?.openclaw
+  const openclawObj =
+    openclawMeta && typeof openclawMeta === 'object' && !Array.isArray(openclawMeta)
+      ? (openclawMeta as Record<string, unknown>)
+      : undefined
   const metadataSource =
     clawdbotMeta && typeof clawdbotMeta === 'object' && !Array.isArray(clawdbotMeta)
       ? (clawdbotMeta as Record<string, unknown>)
       : clawdisMeta && typeof clawdisMeta === 'object' && !Array.isArray(clawdisMeta)
         ? (clawdisMeta as Record<string, unknown>)
-        : openclawMeta && typeof openclawMeta === 'object' && !Array.isArray(openclawMeta)
-          ? (openclawMeta as Record<string, unknown>)
+        : openclawObj
+          ? openclawObj
           : undefined
   const clawdisRaw = metadataSource ?? frontmatter.clawdis
 
@@ -140,7 +144,8 @@ export function parseClawdisMetadata(frontmatter: ParsedSkillFrontmatter) {
     if (typeof clawdisObj.author === 'string') metadata.author = clawdisObj.author
     const links = parseSkillLinks(clawdisObj.links)
     if (links) metadata.links = links
-    const capabilities = normalizeCapabilities(clawdisObj.capabilities)
+    // Prefer canonical openclaw capability declarations when present, even in mixed legacy manifests.
+    const capabilities = normalizeCapabilities(openclawObj?.capabilities ?? clawdisObj.capabilities)
     if (capabilities.length > 0) metadata.capabilities = capabilities
 
     return parseArk(ClawdisSkillMetadataSchema, metadata, 'Clawdis metadata')
