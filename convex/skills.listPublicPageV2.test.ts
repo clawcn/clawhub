@@ -98,25 +98,15 @@ describe('skills.listPublicPageV2', () => {
     expect(paginateMock).toHaveBeenCalledWith({ cursor: null, numItems: 25 })
   })
 
-  it('skips fully filtered pages until it finds matching skills', async () => {
+  it('returns empty filtered page without multi-paginate when no rows match', async () => {
     const plain = makeSkill('skills:plain', 'plain', 'users:1', 'skillVersions:1')
-    const highlightedClean = makeSkill('skills:hl-clean', 'hl-clean', 'users:2', 'skillVersions:2')
-    const paginateMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        page: [plain],
-        continueCursor: 'next-cursor',
-        isDone: false,
-        pageStatus: null,
-        splitCursor: null,
-      })
-      .mockResolvedValueOnce({
-        page: [highlightedClean],
-        continueCursor: 'after-highlighted',
-        isDone: false,
-        pageStatus: null,
-        splitCursor: null,
-      })
+    const paginateMock = vi.fn().mockResolvedValueOnce({
+      page: [plain],
+      continueCursor: 'next-cursor',
+      isDone: false,
+      pageStatus: null,
+      splitCursor: null,
+    })
     const ctx = {
       db: {
         query: vi.fn(() => ({
@@ -124,11 +114,7 @@ describe('skills.listPublicPageV2', () => {
             order: vi.fn(() => ({ paginate: paginateMock })),
           })),
         })),
-        get: vi.fn(async (id: string) => {
-          if (id.startsWith('users:')) return makeUser(id)
-          if (id.startsWith('skillVersions:')) return makeVersion(id)
-          return null
-        }),
+        get: vi.fn(),
       },
     }
 
@@ -140,13 +126,10 @@ describe('skills.listPublicPageV2', () => {
       nonSuspiciousOnly: false,
     })
 
-    expect(result.page).toHaveLength(1)
-    expect(result.page[0]?.skill.slug).toBe('hl-clean')
-    expect(result.continueCursor).toBe('after-highlighted')
+    expect(result.page).toEqual([])
+    expect(result.continueCursor).toBe('next-cursor')
     expect(result.isDone).toBe(false)
-    expect(paginateMock).toHaveBeenCalledTimes(2)
-    expect(paginateMock).toHaveBeenNthCalledWith(1, { cursor: null, numItems: 25 })
-    expect(paginateMock).toHaveBeenNthCalledWith(2, { cursor: 'next-cursor', numItems: 25 })
+    expect(paginateMock).toHaveBeenCalledTimes(1)
   })
 
   it('returns exhausted when filtered pages remain empty to the end', async () => {
@@ -232,18 +215,10 @@ describe('skills.listPublicPageV2', () => {
     expect(paginateMock).toHaveBeenCalledTimes(1)
   })
 
-  it('restarts pagination from first page when cursor is stale', async () => {
-    const plain = makeSkill('skills:plain', 'plain', 'users:1', 'skillVersions:1')
+  it('returns empty isDone page when cursor is stale', async () => {
     const paginateMock = vi
       .fn()
       .mockRejectedValueOnce(new Error('Failed to parse cursor'))
-      .mockResolvedValueOnce({
-        page: [plain],
-        continueCursor: 'next-cursor',
-        isDone: false,
-        pageStatus: null,
-        splitCursor: null,
-      })
     const ctx = {
       db: {
         query: vi.fn(() => ({
@@ -251,11 +226,7 @@ describe('skills.listPublicPageV2', () => {
             order: vi.fn(() => ({ paginate: paginateMock })),
           })),
         })),
-        get: vi.fn(async (id: string) => {
-          if (id.startsWith('users:')) return makeUser(id)
-          if (id.startsWith('skillVersions:')) return makeVersion(id)
-          return null
-        }),
+        get: vi.fn(),
       },
     }
 
@@ -267,17 +238,11 @@ describe('skills.listPublicPageV2', () => {
       nonSuspiciousOnly: false,
     })
 
-    expect(result.page).toHaveLength(1)
-    expect(result.page[0]?.skill.slug).toBe('plain')
-    expect(result.continueCursor).toBe('next-cursor')
-    expect(result.isDone).toBe(false)
-    expect(paginateMock).toHaveBeenNthCalledWith(1, { cursor: 'stale-cursor', numItems: 25 })
-    expect(paginateMock).toHaveBeenNthCalledWith(2, { cursor: null, numItems: 25 })
-    expect(paginateMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.any(Number),
-      }),
-    )
+    expect(result.page).toEqual([])
+    expect(result.isDone).toBe(true)
+    expect(result.continueCursor).toBe('')
+    expect(paginateMock).toHaveBeenCalledTimes(1)
+    expect(paginateMock).toHaveBeenCalledWith({ cursor: 'stale-cursor', numItems: 25 })
   })
 
   it('drops pagination id from client options on first-page queries', async () => {

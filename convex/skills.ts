@@ -2344,27 +2344,14 @@ export const listPublicPageV2 = query({
 
     // Use the lightweight skillSearchDigest table (~800 bytes/row vs ~1.9KB)
     // to avoid Bytes Read Limit errors on the full skills table.
-    // When post-pagination filters are active, skip empty filtered pages so clients
-    // don't bounce between CanLoadMore/LoadingMore with no visible new rows.
-    let result = await paginateWithStaleCursorRecovery(
+    const result = await paginateWithStaleCursorRecovery(
       runPaginate,
       initialCursor,
     )
-    let filteredPage = filterPublicSkillPage(
+    const filteredPage = filterPublicSkillPage(
       result.page.map(digestToHydratableSkill),
       args,
     )
-    while (
-      (args.nonSuspiciousOnly || args.highlightedOnly) &&
-      filteredPage.length === 0 &&
-      !result.isDone
-    ) {
-      result = await runPaginate(result.continueCursor)
-      filteredPage = filterPublicSkillPage(
-        result.page.map(digestToHydratableSkill),
-        args,
-      )
-    }
 
     const items = await buildPublicSkillEntries(ctx, filteredPage)
     return { ...result, page: items }
@@ -2396,30 +2383,29 @@ function normalizePublicListPagination(paginationOpts: {
 }
 
 async function paginateWithStaleCursorRecovery<T>(
-  runPaginate: (cursor: string | null) => Promise<T>,
+  runPaginate: (cursor: string | null) => Promise<{ page: T[]; isDone: boolean; continueCursor: string }>,
   initialCursor: string | null,
 ) {
   try {
     return await runPaginate(initialCursor)
   } catch (error) {
-    // Some clients may send stale cursors after index/query argument changes.
-    // Recover by restarting from the first page instead of surfacing a 500.
-    if (!initialCursor || !isCursorParseError(error)) {
-      throw error
+    if (initialCursor && isStaleCursorError(error)) {
+      // Return a synthetic empty page so usePaginatedQuery restarts cleanly.
+      return { page: [] as T[], isDone: true, continueCursor: '' }
     }
-    return runPaginate(null)
+    throw error
   }
 }
 
-function isCursorParseError(error: unknown) {
-  if (typeof error === 'string') return error.includes('Failed to parse cursor')
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    return (
-      typeof message === 'string' && message.includes('Failed to parse cursor')
-    )
-  }
-  return false
+function isStaleCursorError(error: unknown) {
+  const patterns = ['Failed to parse cursor', 'cursor is from a different query']
+  const msg =
+    typeof error === 'string'
+      ? error
+      : error && typeof error === 'object' && 'message' in error
+        ? String((error as { message?: unknown }).message)
+        : ''
+  return patterns.some((p) => msg.includes(p))
 }
 
 export const countPublicSkills = query({
