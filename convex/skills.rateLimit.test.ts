@@ -434,7 +434,18 @@ describe('skills anti-spam guards', () => {
 
   it('keeps suspicious skills visible for low-trust publishers', async () => {
     const patch = vi.fn(async () => {})
-    const version = { _id: 'skillVersions:1', skillId: 'skills:1' }
+    const version = {
+      _id: 'skillVersions:1',
+      skillId: 'skills:1',
+      staticScan: {
+        status: 'suspicious',
+        reasonCodes: ['suspicious.dynamic_code_execution'],
+        findings: [],
+        summary: '',
+        engineVersion: 'v2.1.1',
+        checkedAt: Date.now(),
+      },
+    }
     const skill = {
       _id: 'skills:1',
       slug: 'spam-skill',
@@ -509,7 +520,18 @@ describe('skills anti-spam guards', () => {
 
   it('keeps admin-owned skills non-suspicious for suspicious scanner verdicts', async () => {
     const patch = vi.fn(async () => {})
-    const version = { _id: 'skillVersions:1', skillId: 'skills:1' }
+    const version = {
+      _id: 'skillVersions:1',
+      skillId: 'skills:1',
+      staticScan: {
+        status: 'suspicious',
+        reasonCodes: ['suspicious.dynamic_code_execution'],
+        findings: [],
+        summary: '',
+        engineVersion: 'v2.1.1',
+        checkedAt: Date.now(),
+      },
+    }
     const skill = {
       _id: 'skills:1',
       slug: 'trusted-skill',
@@ -680,7 +702,18 @@ describe('skills anti-spam guards', () => {
 
   it('vt suspicious escalation does not keep suspicious flags for admin owners', async () => {
     const patch = vi.fn(async () => {})
-    const version = { _id: 'skillVersions:1', skillId: 'skills:1' }
+    const version = {
+      _id: 'skillVersions:1',
+      skillId: 'skills:1',
+      staticScan: {
+        status: 'suspicious',
+        reasonCodes: ['suspicious.dynamic_code_execution'],
+        findings: [],
+        summary: '',
+        engineVersion: 'v2.1.1',
+        checkedAt: Date.now(),
+      },
+    }
     const skill = {
       _id: 'skills:1',
       slug: 'trusted-skill',

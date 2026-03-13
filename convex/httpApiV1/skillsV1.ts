@@ -72,6 +72,7 @@ type SkillModerationShape = {
   moderationFlags?: string[]
   moderationVerdict?: 'clean' | 'suspicious' | 'malicious'
   moderationReasonCodes?: string[]
+  moderationSignals?: Doc<'skills'>['moderationSignals']
   moderationSummary?: string
   moderationEngineVersion?: string
   moderationEvaluatedAt?: number
@@ -101,6 +102,7 @@ type GetBySlugResult = {
     isRemoved: boolean
     verdict?: 'clean' | 'suspicious' | 'malicious'
     reasonCodes?: string[]
+    signals?: Doc<'skills'>['moderationSignals'] | null
     summary?: string
     engineVersion?: string
     updatedAt?: number
@@ -159,6 +161,7 @@ function normalizeModerationFromSkill(skill: SkillModerationShape) {
     isSuspicious,
     verdict,
     reasonCodes: Array.isArray(skill.moderationReasonCodes) ? skill.moderationReasonCodes : [],
+    signals: skill.moderationSignals ?? undefined,
     summary: skill.moderationSummary ?? null,
     engineVersion: skill.moderationEngineVersion ?? null,
     updatedAt: skill.moderationEvaluatedAt ?? skill.updatedAt ?? null,
@@ -177,6 +180,7 @@ type SkillSecuritySnapshot = {
   hasScanResult: boolean
   sha256hash: string | null
   virustotalUrl: string | null
+  signals?: Doc<'skillVersions'>['moderationSignals']
   scanners: {
     vt: {
       status: string
@@ -290,6 +294,7 @@ function buildSkillSecuritySnapshot(version: Doc<'skillVersions'>): SkillSecurit
     hasScanResult,
     sha256hash,
     virustotalUrl: sha256hash ? `https://www.virustotal.com/gui/file/${sha256hash}` : null,
+    signals: version.moderationSignals ?? undefined,
     scanners: {
       vt: vt
         ? {
@@ -560,6 +565,7 @@ export async function skillsGetRouterV1Handler(ctx: ActionCtx, request: Request)
               isMalwareBlocked: result.moderationInfo.isMalwareBlocked ?? false,
               verdict: result.moderationInfo.verdict ?? 'clean',
               reasonCodes: result.moderationInfo.reasonCodes ?? [],
+              signals: result.moderationInfo.signals ?? undefined,
               summary: result.moderationInfo.summary ?? null,
               engineVersion: result.moderationInfo.engineVersion ?? null,
               updatedAt: result.moderationInfo.updatedAt ?? null,
@@ -618,6 +624,7 @@ export async function skillsGetRouterV1Handler(ctx: ActionCtx, request: Request)
             isMalwareBlocked: result.moderationInfo.isMalwareBlocked ?? false,
             verdict: result.moderationInfo.verdict ?? 'clean',
             reasonCodes: result.moderationInfo.reasonCodes ?? [],
+            signals: result.moderationInfo.signals ?? undefined,
             summary: result.moderationInfo.summary ?? null,
             engineVersion: result.moderationInfo.engineVersion ?? null,
             updatedAt: result.moderationInfo.updatedAt ?? null,
