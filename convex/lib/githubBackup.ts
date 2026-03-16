@@ -527,8 +527,8 @@ function encodePath(path: string) {
     .join('/')
 }
 
-function base64Url(value: string | Buffer) {
-  const buffer = typeof value === 'string' ? Buffer.from(value) : value
+function base64Url(value: string | Uint8Array) {
+  const buffer = typeof value === 'string' ? Buffer.from(value) : Buffer.from(value)
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 

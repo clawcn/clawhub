@@ -28,9 +28,16 @@ export function applyTheme(mode: ThemeMode) {
 }
 
 export function useThemeMode() {
-  const [mode, setMode] = useState<ThemeMode>(() => getStoredTheme())
+  const [mode, setMode] = useState<ThemeMode>('system')
+  const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
+    setMode(getStoredTheme())
+    setIsHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isHydrated) return
     applyTheme(mode)
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(THEME_KEY, mode)
@@ -40,7 +47,7 @@ export function useThemeMode() {
     const handler = () => applyTheme(mode)
     media.addEventListener('change', handler)
     return () => media.removeEventListener('change', handler)
-  }, [mode])
+  }, [isHydrated, mode])
 
   return { mode, setMode }
 }

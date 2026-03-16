@@ -107,14 +107,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <ClientOnly>
-          <AppProviders>
-            <div className="app-shell">
-              <Header />
-              <DeploymentDriftBanner />
-              {children}
-              <Footer />
-            </div>
+        <AppProviders>
+          <div className="app-shell">
+            <Header />
+            <DeploymentDriftBanner />
+            {children}
+            <Footer />
+          </div>
+          <ClientOnly>
             <Analytics />
             {import.meta.env.DEV ? (
               <TanStackDevtools
@@ -129,8 +129,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 ]}
               />
             ) : null}
-          </AppProviders>
-        </ClientOnly>
+          </ClientOnly>
+        </AppProviders>
         <Scripts />
       </body>
     </html>

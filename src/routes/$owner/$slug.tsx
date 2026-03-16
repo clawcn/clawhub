@@ -1,15 +1,32 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { SkillDetailPage } from '../../components/SkillDetailPage'
-import { buildSkillMeta, fetchSkillMeta } from '../../lib/og'
+import { buildSkillMeta } from '../../lib/og'
+import { fetchSkillPageData } from '../../lib/skillPage'
 
 export const Route = createFileRoute('/$owner/$slug')({
   loader: async ({ params }) => {
-    const data = await fetchSkillMeta(params.slug)
+    const data = await fetchSkillPageData(params.slug)
+    const canonicalOwner =
+      data.initialData?.result?.owner?.handle ?? data.initialData?.result?.owner?.name ?? null
+    const canonicalSlug = data.initialData?.result?.resolvedSlug ?? params.slug
+
+    if (
+      canonicalOwner &&
+      (canonicalOwner !== params.owner || canonicalSlug !== params.slug)
+    ) {
+      throw redirect({
+        to: '/$owner/$slug',
+        params: { owner: canonicalOwner, slug: canonicalSlug },
+        replace: true,
+      })
+    }
+
     return {
       owner: data?.owner ?? params.owner,
       displayName: data?.displayName ?? null,
       summary: data?.summary ?? null,
       version: data?.version ?? null,
+      initialData: data.initialData,
     }
   },
   head: ({ params, loaderData }) => {
@@ -51,5 +68,6 @@ export const Route = createFileRoute('/$owner/$slug')({
 
 function OwnerSkill() {
   const { owner, slug } = Route.useParams()
-  return <SkillDetailPage slug={slug} canonicalOwner={owner} />
+  const { initialData } = Route.useLoaderData()
+  return <SkillDetailPage slug={slug} canonicalOwner={owner} initialData={initialData} />
 }

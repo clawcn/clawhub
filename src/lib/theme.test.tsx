@@ -87,4 +87,20 @@ describe('theme', () => {
     })
     expect(window.localStorage.getItem('clawhub-theme')).toBe('dark')
   })
+
+  it('loads stored theme after mount without a mismatched initial render', async () => {
+    window.localStorage.setItem('clawhub-theme', 'dark')
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+    render(<Harness />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mode').textContent).toBe('dark')
+    })
+    expect(document.documentElement.dataset.theme).toBe('dark')
+  })
 })

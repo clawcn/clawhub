@@ -4,12 +4,13 @@ import { useAction, useMutation, useQuery } from 'convex/react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
-import type { PublicSkill, PublicUser } from '../lib/publicUser'
 import { canManageSkill, isModerator } from '../lib/roles'
+import type { SkillBySlugResult, SkillPageInitialData } from '../lib/skillPage'
 import { useAuthStatus } from '../lib/useAuthStatus'
+import { ClientOnly } from './ClientOnly'
 import { SkillCommentsPanel } from './SkillCommentsPanel'
 import { SkillDetailTabs } from './SkillDetailTabs'
-import { SkillHeader, type SkillModerationInfo } from './SkillHeader'
+import { SkillHeader } from './SkillHeader'
 import { SkillOwnershipPanel } from './SkillOwnershipPanel'
 import { SkillReportDialog } from './SkillReportDialog'
 import {
@@ -24,27 +25,8 @@ type SkillDetailPageProps = {
   slug: string
   canonicalOwner?: string
   redirectToCanonical?: boolean
+  initialData?: SkillPageInitialData | null
 }
-
-type SkillBySlugResult = {
-  requestedSlug?: string | null
-  resolvedSlug?: string | null
-  skill: Doc<'skills'> | PublicSkill
-  latestVersion: Doc<'skillVersions'> | null
-  owner: Doc<'users'> | PublicUser | null
-  pendingReview?: boolean
-  moderationInfo?: SkillModerationInfo | null
-  forkOf: {
-    kind: 'fork' | 'duplicate'
-    version: string | null
-    skill: { slug: string; displayName: string }
-    owner: { handle: string | null; userId: Id<'users'> | null }
-  } | null
-  canonical: {
-    skill: { slug: string; displayName: string }
-    owner: { handle: string | null; userId: Id<'users'> | null }
-  } | null
-} | null
 
 type SkillFile = Doc<'skillVersions'>['files'][number]
 
@@ -80,9 +62,11 @@ export function SkillDetailPage({
   slug,
   canonicalOwner,
   redirectToCanonical,
+  initialData,
 }: SkillDetailPageProps) {
   const navigate = useNavigate()
   const { isAuthenticated, me } = useAuthStatus()
+  const initialResult = initialData?.result ?? undefined
 
   const isStaff = isModerator(me)
   const staffResult = useQuery(api.skills.getBySlugForStaff, isStaff ? { slug } : 'skip') as
@@ -91,15 +75,22 @@ export function SkillDetailPage({
   const publicResult = useQuery(api.skills.getBySlug, !isStaff ? { slug } : 'skip') as
     | SkillBySlugResult
     | undefined
-  const result = isStaff ? staffResult : publicResult
+  const result = isStaff
+    ? staffResult
+    : publicResult === undefined
+      ? initialResult
+      : publicResult
 
   const toggleStar = useMutation(api.stars.toggle)
   const reportSkill = useMutation(api.skills.report)
   const updateTags = useMutation(api.skills.updateTags)
   const getReadme = useAction(api.skills.getReadme)
 
-  const [readme, setReadme] = useState<string | null>(null)
-  const [readmeError, setReadmeError] = useState<string | null>(null)
+  const [readme, setReadme] = useState<string | null>(initialData?.readme ?? null)
+  const [readmeError, setReadmeError] = useState<string | null>(initialData?.readmeError ?? null)
+  const [loadedReadmeVersionId, setLoadedReadmeVersionId] = useState<Id<'skillVersions'> | null>(
+    initialResult?.latestVersion?._id ?? null,
+  )
   const [tagName, setTagName] = useState('latest')
   const [tagVersionId, setTagVersionId] = useState<Id<'skillVersions'> | ''>('')
   const [activeTab, setActiveTab] = useState<'files' | 'compare' | 'versions'>('files')
@@ -109,7 +100,7 @@ export function SkillDetailPage({
   const [reportError, setReportError] = useState<string | null>(null)
   const [isSubmittingReport, setIsSubmittingReport] = useState(false)
 
-  const isLoadingSkill = result === undefined
+  const isLoadingSkill = isStaff ? staffResult === undefined : result === undefined
   const skill = result?.skill
   const owner = result?.owner ?? null
   const latestVersion = result?.latestVersion ?? null
@@ -221,26 +212,35 @@ export function SkillDetailPage({
 
   useEffect(() => {
     if (!latestVersion) return
+    if (
+      loadedReadmeVersionId === latestVersion._id &&
+      (readme !== null || readmeError !== null)
+    ) {
+      return
+    }
 
     setReadme(null)
     setReadmeError(null)
+    setLoadedReadmeVersionId(latestVersion._id)
     let cancelled = false
 
     void getReadme({ versionId: latestVersion._id })
       .then((data) => {
         if (cancelled) return
         setReadme(data.text)
+        setLoadedReadmeVersionId(latestVersion._id)
       })
       .catch((error) => {
         if (cancelled) return
         setReadmeError(error instanceof Error ? error.message : 'Failed to load README')
         setReadme(null)
+        setLoadedReadmeVersionId(latestVersion._id)
       })
 
     return () => {
       cancelled = true
     }
-  }, [latestVersion, getReadme])
+  }, [getReadme, latestVersion, loadedReadmeVersionId, readme, readmeError])
 
   useEffect(() => {
     if (!tagVersionId && latestVersion) {
@@ -413,7 +413,20 @@ export function SkillDetailPage({
           scanResultsSuppressedMessage={scanResultsSuppressedMessage}
         />
 
-        <SkillCommentsPanel skillId={skill._id} isAuthenticated={isAuthenticated} me={me ?? null} />
+        <ClientOnly
+          fallback={
+            <div className="card">
+              <h2 className="section-title" style={{ fontSize: '1.2rem', margin: 0 }}>
+                Comments
+              </h2>
+              <p className="section-subtitle" style={{ marginTop: 12, marginBottom: 0 }}>
+                Loading comments…
+              </p>
+            </div>
+          }
+        >
+          <SkillCommentsPanel skillId={skill._id} isAuthenticated={isAuthenticated} me={me ?? null} />
+        </ClientOnly>
       </div>
 
       <SkillReportDialog
