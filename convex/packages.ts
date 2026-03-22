@@ -721,6 +721,17 @@ export const insertReleaseInternal = internalMutation({
         `Package "${args.name}" already exists as a ${existing.family}; family changes are not allowed`,
       );
     }
+    if (
+      existing &&
+      existing.family === "code-plugin" &&
+      existing.runtimeId &&
+      args.runtimeId &&
+      existing.runtimeId !== args.runtimeId
+    ) {
+      throw new ConvexError(
+        `Package "${args.name}" already exists with plugin id "${existing.runtimeId}"; runtime id changes are not allowed`,
+      );
+    }
     if (args.family === "code-plugin" && args.runtimeId) {
       const runtimeCollision = await ctx.db
         .query("packages")

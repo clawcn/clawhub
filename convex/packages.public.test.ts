@@ -762,6 +762,26 @@ describe("packages public queries", () => {
     ).rejects.toThrow("family changes are not allowed");
   });
 
+  it("rejects runtime id changes on an existing code plugin package", async () => {
+    const ctx = makeInsertReleaseCtx(makePackageDoc({ runtimeId: "demo.plugin" }));
+
+    await expect(
+      insertReleaseInternalHandler(ctx, {
+        userId: "users:owner",
+        name: "demo-plugin",
+        displayName: "Demo Plugin",
+        family: "code-plugin",
+        version: "1.0.1",
+        changelog: "retarget runtime id",
+        tags: ["latest"],
+        summary: "demo",
+        files: [],
+        integritySha256: "abc123",
+        runtimeId: "other.plugin",
+      }),
+    ).rejects.toThrow('runtime id changes are not allowed');
+  });
+
   it("promotes existing packages to official when publisher becomes trusted", async () => {
     const ctx = makeInsertReleaseCtx(
       makePackageDoc({
