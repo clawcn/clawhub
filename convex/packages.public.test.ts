@@ -2125,7 +2125,7 @@ describe("packages public queries", () => {
     );
   });
 
-  it("hides pending-scan packages from public reads", async () => {
+  it("keeps pending-scan packages visible to public reads", async () => {
     vi.mocked(getAuthUserId).mockResolvedValue(null);
     const ctx = {
       db: {
@@ -2146,7 +2146,7 @@ describe("packages public queries", () => {
     };
 
     const result = await getByNameHandler(ctx as never, { name: "demo-plugin" });
-    expect(result).toBeNull();
+    expect(result?.package?.name).toBe("demo-plugin");
   });
 
   it("keeps pending-scan packages visible to the owner", async () => {

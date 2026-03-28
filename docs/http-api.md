@@ -350,6 +350,7 @@ Notes:
 - Uses the read rate bucket, not the download bucket.
 - Binary files return `415`.
 - File size limit: 200KB.
+- Pending VirusTotal scans do not block reads; malicious releases may still be withheld elsewhere.
 - Private packages return `404` unless the caller can read the owning publisher.
 
 ### `GET /api/v1/packages/{name}/download`
@@ -367,6 +368,7 @@ Notes:
 - Skills redirect to `GET /api/v1/download`.
 - Plugin/package archives are zip files with a `package/` root so they install directly in OpenClaw without repacking.
 - Registry-only metadata is not injected into the downloaded archive.
+- Pending VirusTotal scans do not block downloads; malicious releases return `403`.
 - Private packages return `404` unless the caller is the owner.
 
 ### `GET /api/v1/resolve`

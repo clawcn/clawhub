@@ -40,7 +40,7 @@ export function resolvePackageReleaseScanStatus(
 }
 
 export function isPackageBlockedFromPublic(scanStatus: PackageScanStatus) {
-  return scanStatus === "pending" || scanStatus === "malicious";
+  return scanStatus === "malicious";
 }
 
 export function getPackageDownloadSecurityBlock(release: PackageReleaseSecurityLike) {
@@ -50,13 +50,6 @@ export function getPackageDownloadSecurityBlock(release: PackageReleaseSecurityL
     return {
       status: 403,
       message: "Blocked: this package release has been flagged as malicious and cannot be downloaded.",
-    };
-  }
-
-  if (scanStatus === "pending") {
-    return {
-      status: 423,
-      message: "This package release is pending a security scan by VirusTotal. Please try again in a few minutes.",
     };
   }
 
