@@ -80,19 +80,27 @@ jobs:
       - name: Validate publish mode inputs
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          JSON_MODE: ${{ inputs.json }}
           CLAWHUB_TOKEN: ${{ secrets.clawhub_token }}
         run: |
           if [[ "$DRY_RUN" != "true" && -z "$CLAWHUB_TOKEN" ]]; then
             echo "::error::secrets.clawhub_token is required when dry_run is false."
             exit 1
           fi
+          if [[ "$JSON_MODE" != "true" ]]; then
+            echo "::warning::This reusable workflow always emits JSON output; forcing --json for downstream parsing."
+          fi
 
       - name: Write ClawHub config
-        if: secrets.clawhub_token != ''
         env:
           CLAWHUB_TOKEN: ${{ secrets.clawhub_token }}
           CLAWHUB_REGISTRY: ${{ inputs.registry }}
         run: |
+          if [[ -z "$CLAWHUB_TOKEN" ]]; then
+            echo "No ClawHub token provided, skipping config file creation."
+            exit 0
+          fi
+
           python3 - <<'PY'
           import json
           import os
@@ -119,13 +127,13 @@ jobs:
           INPUT_SOURCE: ${{ inputs.source }}
           INPUT_REF: ${{ inputs.ref }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
-          INPUT_JSON: ${{ inputs.json }}
           INPUT_OWNER: ${{ inputs.owner }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_TAGS: ${{ inputs.tags }}
           INPUT_SITE: ${{ inputs.site }}
           INPUT_REGISTRY: ${{ inputs.registry }}
           INPUT_CLAWHUB_VERSION: ${{ inputs.clawhub_version }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           python3 - <<'PY'
           import json
@@ -137,6 +145,8 @@ jobs:
           if not source:
               source = os.environ["GITHUB_REPOSITORY"]
           ref = os.environ["INPUT_REF"].strip()
+          if not ref and source == os.environ["GITHUB_REPOSITORY"]:
+              ref = os.environ["GITHUB_SHA"].strip()
           if ref and "@" not in source and not source.startswith("http"):
               source = f"{source}@{ref}"
 
@@ -154,8 +164,7 @@ jobs:
 
           if os.environ["INPUT_DRY_RUN"] == "true":
               cmd.append("--dry-run")
-          if os.environ["INPUT_JSON"] == "true":
-              cmd.append("--json")
+          cmd.append("--json")
 
           owner = os.environ["INPUT_OWNER"].strip()
           version = os.environ["INPUT_VERSION"].strip()

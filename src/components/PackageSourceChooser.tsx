@@ -21,7 +21,7 @@ export function PackageSourceChooser(props: {
   const [isDragging, setIsDragging] = useState(false);
   const archiveInputRef = useRef<HTMLInputElement | null>(null);
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
-  const isMetadataLocked = props.files.length === 0;
+  const isMetadataLocked = props.files.length === 0 || Boolean(props.validationError);
 
   const setDirectoryInputRef = (node: HTMLInputElement | null) => {
     directoryInputRef.current = node;

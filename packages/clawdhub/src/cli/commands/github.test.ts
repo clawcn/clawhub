@@ -27,6 +27,37 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function mockGitHubCommitLookup(validRefs: string[]) {
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    const match = url.match(/\/repos\/owner\/repo\/commits\/(.+)$/);
+    if (!match) {
+      throw new Error(`Unexpected fetch: ${url}`);
+    }
+    const ref = decodeURIComponent(match[1] ?? "");
+    if (!validRefs.includes(ref)) {
+      return new Response("not found", { status: 404 });
+    }
+    return new Response(JSON.stringify({ sha: "0123456789abcdef0123456789abcdef01234567" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
+  Object.defineProperty(globalThis, "fetch", {
+    value: fetchMock,
+    configurable: true,
+    writable: true,
+  });
+  return () => {
+    Object.defineProperty(globalThis, "fetch", {
+      value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
+  };
+}
+
 describe("github publish source helpers", () => {
   it.each([
     ["owner/repo", { kind: "github", owner: "owner", repo: "repo", path: ".", url: "https://github.com/owner/repo" }],
@@ -107,9 +138,36 @@ describe("github publish source helpers", () => {
     ],
   ])("parses %s as a GitHub source", async (input, expected) => {
     const workdir = await makeTmpDir();
+    const restoreFetch =
+      input.includes("/tree/") || input.includes("/blob/")
+        ? mockGitHubCommitLookup([String((expected as { ref?: string }).ref ?? "")])
+        : null;
     try {
       await expect(resolveSourceInput(input, { workdir })).resolves.toEqual(expected);
     } finally {
+      restoreFetch?.();
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it("parses tree URLs whose refs contain slashes", async () => {
+    const workdir = await makeTmpDir();
+    const restoreFetch = mockGitHubCommitLookup(["feature/new-ui"]);
+    try {
+      await expect(
+        resolveSourceInput("https://github.com/owner/repo/tree/feature/new-ui/plugins/demo", {
+          workdir,
+        }),
+      ).resolves.toEqual({
+        kind: "github",
+        owner: "owner",
+        repo: "repo",
+        ref: "feature/new-ui",
+        path: "plugins/demo",
+        url: "https://github.com/owner/repo",
+      });
+    } finally {
+      restoreFetch();
       await rm(workdir, { recursive: true, force: true });
     }
   });
@@ -234,6 +292,63 @@ describe("github publish source helpers", () => {
       expect(await readFile(join(fetched.dir, "package.json"), "utf8")).toContain('"name":"demo"');
     } finally {
       await fetched.cleanup();
+      Object.defineProperty(globalThis, "fetch", {
+        value: originalFetch,
+        configurable: true,
+        writable: true,
+      });
+    }
+  });
+
+  it("rejects GitHub archives with unsafe paths", async () => {
+    const archiveBytes = zipSync({
+      "repo-root/../../escape.txt": new TextEncoder().encode("bad\n"),
+      "repo-root/package.json": new TextEncoder().encode('{"name":"demo","version":"1.0.0"}\n'),
+      "repo-root/openclaw.plugin.json": new TextEncoder().encode('{"id":"demo","configSchema":{"type":"object"}}\n'),
+    });
+    const archiveBody = archiveBytes.buffer.slice(
+      archiveBytes.byteOffset,
+      archiveBytes.byteOffset + archiveBytes.byteLength,
+    ) as ArrayBuffer;
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ default_branch: "main" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sha: "0123456789abcdef0123456789abcdef01234567" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(archiveBody, {
+          status: 200,
+          headers: { "content-type": "application/zip" },
+        }),
+      );
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, "fetch", {
+      value: fetchMock,
+      configurable: true,
+      writable: true,
+    });
+
+    try {
+      await expect(
+        fetchGitHubSource({
+          kind: "github",
+          owner: "owner",
+          repo: "repo",
+          path: ".",
+          url: "https://github.com/owner/repo",
+        }),
+      ).rejects.toThrow(/Unsafe path in archive/i);
+    } finally {
       Object.defineProperty(globalThis, "fetch", {
         value: originalFetch,
         configurable: true,

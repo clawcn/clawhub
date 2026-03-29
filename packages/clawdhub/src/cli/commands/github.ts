@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { unzipSync } from "fflate";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
@@ -52,7 +52,7 @@ export async function resolveSourceInput(
   if (!trimmed) throw new Error("Path required");
 
   if (trimmed.startsWith("https://")) {
-    return parseGitHubUrl(trimmed);
+    return await parseGitHubUrl(trimmed);
   }
 
   const shorthand = parseGitHubShorthand(trimmed);
@@ -178,7 +178,7 @@ function parseGitHubShorthand(input: string): Extract<ResolvedPublishSource, { k
   };
 }
 
-function parseGitHubUrl(input: string): Extract<ResolvedPublishSource, { kind: "github" }> {
+async function parseGitHubUrl(input: string): Promise<Extract<ResolvedPublishSource, { kind: "github" }>> {
   let url: URL;
   try {
     url = new URL(input);
@@ -204,29 +204,14 @@ function parseGitHubUrl(input: string): Extract<ResolvedPublishSource, { kind: "
     };
   }
 
-  const ref = segments[3] ?? "";
-  if (!ref) throw new Error("Missing ref in GitHub URL");
-  const rest = segments.slice(4).join("/");
-  const normalizedPath = normalizeRepoSubpath(rest || ".");
-  if (kind === "blob") {
-    if (!rest) throw new Error("Missing path in GitHub URL");
-    const parent = normalizeRepoSubpath(rest.split("/").slice(0, -1).join("/") || ".");
-    return {
-      kind: "github",
-      owner,
-      repo,
-      ref,
-      path: parent,
-      url: `https://github.com/${owner}/${repo}`,
-    };
-  }
+  const { ref, path } = await resolveGitHubUrlRefAndPath(owner, repo, kind, segments.slice(3));
 
   return {
     kind: "github",
     owner,
     repo,
     ref,
-    path: normalizedPath,
+    path,
     url: `https://github.com/${owner}/${repo}`,
   };
 }
@@ -295,6 +280,19 @@ async function resolveCommitSha(owner: string, repo: string, ref: string, token?
   return sha;
 }
 
+async function tryResolveCommitSha(owner: string, repo: string, ref: string, token?: string) {
+  const response = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/commits/${encodeURIComponent(ref)}`,
+    {
+      headers: buildGitHubHeaders(token),
+    },
+  );
+  if (!response.ok) return null;
+  const parsed = (await response.json()) as { sha?: unknown };
+  const sha = typeof parsed.sha === "string" ? parsed.sha.trim().toLowerCase() : "";
+  return /^[a-f0-9]{40}$/.test(sha) ? sha : null;
+}
+
 async function downloadGitHubZip(owner: string, repo: string, ref: string, token?: string) {
   const response = await fetch(
     `${GITHUB_API}/repos/${owner}/${repo}/zipball/${encodeURIComponent(ref)}`,
@@ -346,12 +344,44 @@ function filterEntriesForSubpath(entries: Record<string, Uint8Array>, subpath: s
 }
 
 async function writeEntries(root: string, entries: Record<string, Uint8Array>) {
+  const absRoot = resolve(root);
   for (const [path, bytes] of Object.entries(entries)) {
     if (!path || path.endsWith("/")) continue;
-    const absPath = join(root, ...path.split("/"));
+    const absPath = resolve(absRoot, ...path.split("/"));
+    if (absPath !== absRoot && !absPath.startsWith(`${absRoot}${sep}`)) {
+      throw new Error(`Unsafe path in archive: ${path}`);
+    }
     await mkdir(dirname(absPath), { recursive: true });
     await writeFile(absPath, Buffer.from(bytes));
   }
+}
+
+async function resolveGitHubUrlRefAndPath(
+  owner: string,
+  repo: string,
+  kind: "tree" | "blob",
+  segments: string[],
+) {
+  if (segments.length === 0) throw new Error("Missing ref in GitHub URL");
+
+  const token = process.env.GITHUB_TOKEN?.trim() || undefined;
+  const minPathSegments = kind === "blob" ? 1 : 0;
+  const maxRefSegments = segments.length - minPathSegments;
+
+  for (let refSegmentCount = maxRefSegments; refSegmentCount >= 1; refSegmentCount -= 1) {
+    const ref = segments.slice(0, refSegmentCount).join("/");
+    const pathRemainder = segments.slice(refSegmentCount).join("/");
+    if (kind === "blob" && !pathRemainder) continue;
+    const commit = await tryResolveCommitSha(owner, repo, ref, token);
+    if (!commit) continue;
+    const path =
+      kind === "blob"
+        ? normalizeRepoSubpath(pathRemainder.split("/").slice(0, -1).join("/") || ".")
+        : normalizeRepoSubpath(pathRemainder || ".");
+    return { ref, path };
+  }
+
+  throw new Error("GitHub ref not found in URL");
 }
 
 function runGit(cwd: string, args: string[]) {

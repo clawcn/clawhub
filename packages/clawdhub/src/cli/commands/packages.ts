@@ -792,7 +792,8 @@ function buildSource(
   const rawRepo = options.sourceRepo?.trim() || inferred?.repo?.trim();
   const rawCommit = options.sourceCommit?.trim() || inferred?.commit?.trim();
   const rawRef = options.sourceRef?.trim() || inferred?.ref?.trim();
-  const rawPath = options.sourcePath?.trim() || inferred?.path?.trim();
+  const explicitPath = options.sourcePath?.trim();
+  const rawPath = explicitPath !== undefined ? explicitPath : inferred?.path?.trim();
   if (!rawRepo && !rawCommit && !rawRef && !rawPath) return undefined;
   if (!rawRepo || !rawCommit) fail("--source-repo and --source-commit must be set together");
   const repo = normalizeGitHubRepo(rawRepo);

@@ -599,6 +599,63 @@ describe("package commands", () => {
     }
   });
 
+  it("preserves inferred source subpaths for nested local plugin folders", async () => {
+    const workdir = await makeTmpWorkdir();
+    const dateSpy = vi.spyOn(Date, "now").mockReturnValue(333_333_333);
+    try {
+      const folder = join(workdir, "packages", "demo-plugin");
+      await mkdir(folder, { recursive: true });
+      await writeFile(
+        join(folder, "package.json"),
+        makeCodePluginPackageJson({
+          name: "demo-plugin",
+          displayName: "Demo Plugin",
+          version: "1.0.0",
+        }),
+        "utf8",
+      );
+      await writeFile(
+        join(folder, "openclaw.plugin.json"),
+        JSON.stringify({ id: "demo.plugin", configSchema: { type: "object" } }),
+        "utf8",
+      );
+
+      runGit(workdir, ["init", "-b", "main"]);
+      runGit(workdir, ["remote", "add", "origin", "git@github.com:openclaw/demo-plugin.git"]);
+      runGit(workdir, ["add", "."]);
+      runGit(workdir, ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init"]);
+
+      httpMocks.apiRequestForm.mockResolvedValueOnce({
+        ok: true,
+        packageId: "pkg_1",
+        releaseId: "rel_1",
+      });
+
+      await cmdPublishPackage(makeOpts(workdir), "packages/demo-plugin", {});
+
+      expect(getPublishPayload()).toEqual({
+        name: "demo-plugin",
+        displayName: "Demo Plugin",
+        family: "code-plugin",
+        version: "1.0.0",
+        changelog: "",
+        tags: ["latest"],
+        source: {
+          kind: "github",
+          url: "https://github.com/openclaw/demo-plugin",
+          repo: "openclaw/demo-plugin",
+          ref: "main",
+          commit: expect.any(String),
+          path: "packages/demo-plugin",
+          importedAt: 333_333_333,
+        },
+      });
+      dateSpy.mockRestore();
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
   it("supports dry-run without auth or publish and prints a summary", async () => {
     const workdir = await makeTmpWorkdir();
     const dateSpy = vi.spyOn(Date, "now").mockReturnValue(444_444_444);

@@ -281,6 +281,23 @@ describe("plugins publish route", () => {
     expect(publishRelease).not.toHaveBeenCalled();
   });
 
+  it("does not mark the upload summary ready while validation errors are present", async () => {
+    renderPublishRoute();
+
+    const bigFile = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "too-big.bin", {
+      type: "application/octet-stream",
+    });
+
+    fireEvent.change(getFileInput(), { target: { files: [bigFile] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Each file must be 10MB or smaller/i)).toBeTruthy();
+    });
+
+    const summary = document.querySelector(".plugin-upload-summary");
+    expect(summary?.classList.contains("is-ready")).toBe(false);
+  });
+
   it("publishes a bundle plugin folder with bundle metadata", async () => {
     renderPublishRoute();
 
